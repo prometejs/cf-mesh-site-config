@@ -1,0 +1,4 @@
+---
+# TODO(iteration-1): confirm with operator — SSH user provisioned by image/cloud-init.
+ansible_user: root
+ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"

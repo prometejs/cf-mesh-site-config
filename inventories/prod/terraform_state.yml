@@ -1,0 +1,11 @@
+---
+# Source of truth: cf-terraform-infra (S3 backend state).
+# Workspace selection: set TF_WORKSPACE=prod before running ansible.
+plugin: cloud.terraform.terraform_state
+backend_type: s3
+backend_config:
+  bucket: tf-prometejs-state-bucket
+  key: cloudflare-infra/prod/terraform.tfstate
+  region: eu-west-2
+  encrypt: true
+  use_lockfile: true

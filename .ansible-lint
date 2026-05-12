@@ -1,0 +1,11 @@
+---
+profile: production
+
+exclude_paths:
+  - .ansible/
+  - .venv/
+  - .github/
+
+# The terraform_state inventory file uses a backend_config dict that
+# ansible-lint may want to flag; keep the standard rules otherwise.
+skip_list: []

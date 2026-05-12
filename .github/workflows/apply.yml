@@ -1,0 +1,176 @@
+---
+name: Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      workspace:
+        description: Terraform workspace (state file) to apply against.
+        type: choice
+        required: true
+        default: dev
+        options: [dev, prod]
+      limit:
+        description: Ansible --limit pattern (optional; defaults to all connectors).
+        type: string
+        required: false
+        default: ""
+  repository_dispatch:
+    types: [cf-tf-applied]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apply-${{ inputs.workspace || github.event.client_payload.workspace }}
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Ansible apply
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.workspace || github.event.client_payload.workspace }}
+    timeout-minutes: 20
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION || 'eu-west-2' }}
+      # Cloudflare WARP service-token credentials. Generated in Zero Trust
+      # dashboard → Settings → Service tokens.
+      CF_WARP_ORG: ${{ vars.CF_WARP_ORG }}
+      CF_WARP_AUTH_CLIENT_ID: ${{ secrets.CF_WARP_AUTH_CLIENT_ID }}
+      CF_WARP_AUTH_CLIENT_SECRET: ${{ secrets.CF_WARP_AUTH_CLIENT_SECRET }}
+
+    steps:
+      - name: Resolve inputs
+        id: inputs
+        env:
+          DISPATCH_WS: ${{ inputs.workspace }}
+          DISPATCH_LIMIT: ${{ inputs.limit }}
+          PAYLOAD_WS: ${{ github.event.client_payload.workspace }}
+          PAYLOAD_SITES: ${{ github.event.client_payload.new_sites }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT" == "workflow_dispatch" ]]; then
+            ws="$DISPATCH_WS"
+            limit="$DISPATCH_LIMIT"
+          else
+            ws="$PAYLOAD_WS"
+            # repository_dispatch carries a space-separated list of new sites.
+            # Normalize to a comma-separated Ansible limit pattern.
+            limit="$(echo "$PAYLOAD_SITES" | tr -s ' ' ',' | sed 's/^,//;s/,$//')"
+          fi
+
+          if [[ -z "$ws" ]]; then
+            echo "::error::workspace not resolved (event=$EVENT)"
+            exit 1
+          fi
+
+          if [[ "$EVENT" == "repository_dispatch" && -z "$limit" ]]; then
+            echo "No new sites in payload; nothing to configure."
+            echo "skip=true" >>"$GITHUB_OUTPUT"
+          fi
+
+          echo "ws=$ws" >>"$GITHUB_OUTPUT"
+          echo "limit=$limit" >>"$GITHUB_OUTPUT"
+          echo "Resolved: workspace=$ws limit='${limit:-<all connectors>}'"
+
+      - name: Checkout
+        if: steps.inputs.outputs.skip != 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        if: steps.inputs.outputs.skip != 'true'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Set up Python
+        if: steps.inputs.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Ansible + collections
+        if: steps.inputs.outputs.skip != 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ansible-core>=2.16"
+          ansible-galaxy collection install -r requirements.yml
+
+      # ---- WARP up -----------------------------------------------------------
+      # Joins the runner to the Cloudflare WARP network as a member device using
+      # a Zero Trust service token. Verify warp-cli commands match your org's
+      # Zero Trust configuration; the exact registration syntax has changed
+      # across warp-cli versions.
+      #
+      # Community alternative: Boostport/setup-cloudflare-warp@<commit-sha>.
+      # Pin to a sha and audit before use; the action wraps these same steps.
+      - name: Install Cloudflare WARP client
+        if: steps.inputs.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg \
+            | sudo gpg --yes --dearmor \
+                --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" \
+            | sudo tee /etc/apt/sources.list.d/cloudflare-client.list >/dev/null
+          sudo apt-get update -y
+          sudo apt-get install -y cloudflare-warp
+          sudo systemctl start warp-svc
+
+      - name: Connect to WARP network
+        if: steps.inputs.outputs.skip != 'true'
+        env:
+          # Headless device enrollment requires a service-token-style
+          # credential set. Exact mechanism depends on your Zero Trust org's
+          # device enrollment posture and warp-cli version — verify both
+          # commands below match your setup before first run.
+          WARP_CLIENT_ID: ${{ secrets.CF_WARP_AUTH_CLIENT_ID }}
+          WARP_CLIENT_SECRET: ${{ secrets.CF_WARP_AUTH_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$WARP_CLIENT_SECRET"
+          warp-cli --accept-tos registration new "$CF_WARP_ORG"
+          warp-cli --accept-tos set-mode warp
+          warp-cli --accept-tos connect
+
+      - name: Wait for WARP tunnel up
+        if: steps.inputs.outputs.skip != 'true'
+        timeout-minutes: 1
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if warp-cli status | grep -q "Status update: Connected"; then
+              echo "WARP connected after ${i}*2s"
+              warp-cli status
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::WARP did not connect within 60s"
+          warp-cli status || true
+          exit 1
+      # ------------------------------------------------------------------------
+
+      - name: Run ping playbook
+        if: steps.inputs.outputs.skip != 'true'
+        env:
+          TF_WORKSPACE: ${{ steps.inputs.outputs.ws }}
+          ANSIBLE_LIMIT: ${{ steps.inputs.outputs.limit }}
+        run: |
+          set -euo pipefail
+          args=(-i "inventories/${TF_WORKSPACE}/terraform_state.yml" playbooks/ping.yml)
+          if [[ -n "$ANSIBLE_LIMIT" ]]; then
+            args+=(-l "$ANSIBLE_LIMIT")
+          fi
+          ansible-playbook "${args[@]}"
+
+      - name: Disconnect WARP
+        if: always()
+        run: |
+          warp-cli disconnect || true
+          warp-cli --accept-tos registration delete || true
