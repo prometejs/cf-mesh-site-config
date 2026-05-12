@@ -10,9 +10,9 @@ graph LR
     classDef activeLinkNodeClass fill:transparent,stroke:#2e7d32,stroke-width:4px,font-weight:bold;
 
     %% Diagram nodes
-    T["cf-terraform-infra<br/><hr/>creates tunnels + tf-states"]:::activeLinkNodeClass
-    C["cf-cloud-init<br/><hr/>first-boot provisioning"]:::linkNode
-    A["cf-site-config<br/><hr/>day-2 config"]:::linkNode
+    T["cf-terraform-infra<br/><hr/>creates tunnels + tf-states"]:::linkNode
+    C["cf-cloud-init<br/><hr/>first-boot provisioning"]:::
+    A["cf-site-config<br/><hr/>day-2 config"]:::activeLinkNodeClass
 
     %% Flow connections with text notes
     T --> C
