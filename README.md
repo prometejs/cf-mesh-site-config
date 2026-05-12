@@ -11,7 +11,7 @@ graph LR
 
     %% Diagram nodes
     T["cf-terraform-infra<br/><hr/>creates tunnels + tf-states"]:::linkNode
-    C["cf-cloud-init<br/><hr/>first-boot provisioning"]:::
+    C["cf-cloud-init<br/><hr/>first-boot provisioning"]:::linkNode
     A["cf-site-config<br/><hr/>day-2 config"]:::activeLinkNodeClass
 
     %% Flow connections with text notes
