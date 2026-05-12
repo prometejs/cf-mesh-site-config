@@ -31,7 +31,7 @@ Inventory is **sourced live from the Terraform state** produced by
 inventory plugin. The plugin reads the S3-backed state directly — no checkout
 of cf-terraform-infra is needed. Terraform state is the single source of truth.
 
-Each connector site provisioned by `cf-terraform-infra` appears as one host.
+*Each connector site provisioned by `cf-terraform-infra` appears as one host.*
 
 **Groups**
 
