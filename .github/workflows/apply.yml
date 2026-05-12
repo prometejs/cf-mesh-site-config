@@ -27,7 +27,6 @@ concurrency:
 
 jobs:
   apply:
-    name: Ansible apply
     runs-on: ubuntu-latest
     environment: ${{ inputs.workspace || github.event.client_payload.workspace }}
     timeout-minutes: 20
