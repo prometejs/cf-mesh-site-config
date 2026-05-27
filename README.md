@@ -41,39 +41,19 @@ graph LR
 | `AWS_SECRET_ACCESS_KEY` | secret | Environment (dev/prod) | Read TF state from S3 |
 | `AWS_REGION` | variable | Repo | Defaults to `eu-west-2` |
 
-## Quickstart (local)
-
-```bash
-ansible-galaxy collection install -r requirements.yml
-
-# One-time per workspace: initialize .tfstate/<ws>/ against the S3 backend.
-bin/init-tfstate dev
-
-# Inventory check - groups + hosts
-ansible-inventory -i inventories/dev/terraform_provider.yml --graph
-
-# Sanity playbook - pings every connector and dumps the contract fields
-ansible-playbook -i inventories/dev/terraform_provider.yml playbooks/ping.yml
-
-# Target a single host
-ansible-playbook -i inventories/dev/terraform_provider.yml playbooks/ping.yml -l dev-site-a
-```
-
-**Don't** run `ansible-inventory --vars` in shared terminals or CI logs as it dumps `tunnel_token` in plain text.
-
 ## Inventory
 
-Inventory is **sourced from Terraform S3-backed state** produced by
+Inventory for mesh nodes is **sourced from Terraform S3-backed state** produced by
 [`cf-mesh-terraform-infra`](https://github.com/prometejs/cf-mesh-terraform-infra) via
-[`cloud.terraform.terraform_provider`](https://github.com/ansible-collections/cloud.terraform)
-inventory plugin, which reads `ansible_host` / `ansible_group` resources from
-state. A throwaway working dir at `.tfstate/<ws>/` is initialized against the
-same S3 backend by `bin/init-tfstate`.
+[`cloud.terraform.terraform_state`](https://github.com/ansible-collections/cloud.terraform)
+inventory plugin.
+
+**_For configs that target devices within a mesh node's private network, additional inventory files can be created and referenced during apply_**
 
 **Groups**
 
 - `environment`(workspace in terraform): maps to `dev` and `prod` GitHub Environments
-- `connectors`: maps to all nodes
+- `connectors`: maps to all mesh nodes
 
 **Host vars**
 
