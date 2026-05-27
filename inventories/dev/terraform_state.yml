@@ -1,11 +1,25 @@
+# workspace ref:`env:/dev/` baked into key path
 ---
-# Source of truth: cf-terraform-infra (S3 backend state).
-# Workspace selection: set TF_WORKSPACE=dev before running ansible.
 plugin: cloud.terraform.terraform_state
 backend_type: s3
 backend_config:
   bucket: tf-prometejs-state-bucket
-  key: cloudflare-infra/dev/terraform.tfstate
+  key: env:/dev/cloudflare-infra/dev/terraform.tfstate
   region: eu-west-2
-  encrypt: true
-  use_lockfile: true
+search_child_modules: true
+provider_mapping:
+  - provider_name: registry.terraform.io/ansible/ansible
+    types:
+      - ansible_host
+compose:
+  ansible_host: variables.value.ansible_host
+  remote_cidrs: variables.value.remote_cidrs | from_json
+  location: variables.value.tags.location
+  site_cidr: variables.value.site_cidr
+  mac: variables.value.tags.mac
+  variables: {} # override default dict
+keyed_groups:
+  - key: groups
+  - key: variables.value.environment
+hostnames:
+  - name

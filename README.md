@@ -1,6 +1,6 @@
 # cf-site-config
 
-Ansible configuration for Cloudflare WARP-connector sites.
+Ansible configuration for Cloudflare Mesh node.
 
 ```mermaid
 graph LR
@@ -10,33 +10,73 @@ graph LR
     classDef activeLinkNodeClass fill:transparent,stroke:#2e7d32,stroke-width:4px,font-weight:bold;
 
     %% Diagram nodes
-    T["cf-terraform-infra<br/><hr/>creates tunnels + tf-states"]:::linkNode
-    C["cf-cloud-init<br/><hr/>first-boot provisioning"]:::linkNode
-    A["cf-site-config<br/><hr/>day-2 config"]:::activeLinkNodeClass
+    T["cf-mesh-terraform-infra<br/><hr/>creates mesh node tunnels + tf-states"]:::linkNode
+    C["cf-mesh-cloud-init<br/><hr/>first-boot provisioning"]:::linkNode
+    A["cf-mesh-site-config<br/><hr/>day-2 config"]:::activeLinkNodeClass
+    N["cf-mesh-node-agent<br/><hr/>metrics+logs collector"]:::linkNode
 
     %% Flow connections with text notes
     T --> C
-    C --- A
+    T --> A
+    C --> A
+    N --> C
 
     %% Clickable hyperlinks (Fixed with 'href')
-    click T href "https://github.com/prometejs/cf-terraform-infra" "Open Terraform Repo"
-    click C href "https://github.com/prometejs/cf-cloud-init" "Open Cloud-Init Repo"
+    click T href "https://github.com/prometejs/cf-mesh-terraform-infra" "Open Terraform Repo"
+    click A href "https://github.com/prometejs/cf-mesh-site-config" "Open Ansible Repo"
+    click N href "https://github.com/prometejs/cf-mesh-node-agent" "Node Agent Repo"
 ```
 
-## Inventory contract
+## Prerequisites
 
-Inventory is **sourced live from the Terraform state** produced by
-[`cf-terraform-infra`](https://github.com/prometejs/cf-terraform-infra) (separate and completely independent repository) via the
-[`cloud.terraform.terraform_state`](https://github.com/ansible-collections/cloud.terraform)
-inventory plugin. The plugin reads the S3-backed state directly — no checkout
-of cf-terraform-infra is needed. Terraform state is the single source of truth.
+- `terraform` CLI on `PATH` (the inventory plugin shells out to it for `show`; `bin/init-tfstate` uses `init` / `workspace`)
+- AWS credentials with read access to the S3 state bucket (env vars or `~/.aws/credentials` — note the `[default]` section header is required)
+- `ansible-core >= 2.16`, Python `>= 3.11`
 
-*Each connector site provisioned by `cf-terraform-infra` appears as one host.*
+#### Required secrets and variables
+
+| Name | Kind | Scope | Purpose |
+| :--- | :--- | :---- | :------ |
+| `AWS_ACCESS_KEY_ID` | secret | Environment (dev/prod) | Read TF state from S3 |
+| `AWS_SECRET_ACCESS_KEY` | secret | Environment (dev/prod) | Read TF state from S3 |
+| `CF_WARP_AUTH_CLIENT_ID` | secret | Environment (dev/prod) | WARP service-token client ID |
+| `CF_WARP_AUTH_CLIENT_SECRET` | secret | Environment (dev/prod) | WARP service-token secret |
+| `CF_WARP_ORG` | variable | Environment / repo  | Zero Trust team domain |
+| `AWS_REGION` | variable | Repo | Defaults to `eu-west-2` |
+
+## Quickstart (local)
+
+```bash
+ansible-galaxy collection install -r requirements.yml
+
+# One-time per workspace: initialize .tfstate/<ws>/ against the S3 backend.
+bin/init-tfstate dev
+
+# Inventory check - groups + hosts
+ansible-inventory -i inventories/dev/terraform_provider.yml --graph
+
+# Sanity playbook - pings every connector and dumps the contract fields
+ansible-playbook -i inventories/dev/terraform_provider.yml playbooks/ping.yml
+
+# Target a single host
+ansible-playbook -i inventories/dev/terraform_provider.yml playbooks/ping.yml -l dev-site-a
+```
+
+**Don't** run `ansible-inventory --vars` in shared terminals or CI logs as it dumps `tunnel_token` in plain text.
+
+## Inventory
+
+Inventory is **sourced from Terraform S3-backed state** produced by
+[`cf-mesh-terraform-infra`](https://github.com/prometejs/cf-mesh-terraform-infra) via
+[`cloud.terraform.terraform_provider`](https://github.com/ansible-collections/cloud.terraform)
+inventory plugin, which reads `ansible_host` / `ansible_group` resources from
+state. A throwaway working dir at `.tfstate/<ws>/` is initialized against the
+same S3 backend by `bin/init-tfstate`.
 
 **Groups**
 
-- `connectors` — every discoverable site host (limitted to connector nodes for now)
-- `dev` / `prod` — parent group per environment (workspace), with `connectors` as a child
+- `environment`(workspace in terraform): maps to `dev` and `prod` GitHub Environments
+- `connectors`: maps to all nodes
 
 **Host vars**
 
@@ -51,65 +91,12 @@ of cf-terraform-infra is needed. Terraform state is the single source of truth.
 | `environment`      | string          | `dev` or `prod`                                        |
 | `remote_cidrs`     | JSON string     | List of other sites' CIDRs — parse with `\| from_json` |
 
-## Repository coupling
+**Subject to change from tf state file**
 
-If `cf-terraform-infra` ever changes its S3 backend (bucket / key prefix /
+**repository coupling**: If `cf-mesh-terraform-infra` ever changes its S3 backend (bucket / key prefix /
 region), update the inventory files here to match.
-
-## Prerequisites
-
-- `terraform` CLI on `PATH` (the inventory plugin shells out to it for `init` / `show`)
-- AWS credentials with read access to the S3 state bucket (env vars or `~/.aws/credentials`)
-- `ansible-core >= 2.16`, Python `>= 3.11`
-
-## Quickstart (local)
-
-```bash
-ansible-galaxy collection install -r requirements.yml
-
-# Pick the workspace whose state you want to read
-export TF_WORKSPACE=dev
-
-# Inventory check — groups + hosts
-ansible-inventory -i inventories/dev/terraform_state.yml --graph
-
-# Sanity playbook — pings every connector and dumps the contract fields
-ansible-playbook -i inventories/dev/terraform_state.yml playbooks/ping.yml
-
-# Target a single host
-ansible-playbook -i inventories/dev/terraform_state.yml playbooks/ping.yml -l dev-site-a
-```
-
-**Don't** run `ansible-inventory --vars` in shared terminals or CI logs — it dumps `tunnel_token` in plain text.
 
 ## CI / Deployment
 
 - [`lint.yml`](.github/workflows/lint.yml): static checks
 - [`apply.yml`](.github/workflows/apply.yml): runs Ansible against real hosts
-
-**Triggers**
-
-- `workflow_dispatch` — manual run. Inputs: `workspace` (`dev`/`prod`) and an
-  optional `limit` pattern (e.g. `dev-site-a` or `dev-site-a,dev-site-b`).
-- `repository_dispatch` with type `cf-tf-applied` — fired by 
-  `cf-terraform-infra` after a successful `terraform apply`. Payload:
-  `{ workspace, new_sites }`. The workflow applies only against `new_sites`.
-
-**Promotion gates**
-
-`dev` and `prod` map to GitHub Environments. Configure required reviewers on
-the `prod` environment to gate prod applies behind manual approval.
-
-**Required secrets and variables**
-
-| Name                            | Kind        | Scope               | Purpose                          |
-| ------------------------------- | ----------- | ------------------- | -------------------------------- |
-| `AWS_ACCESS_KEY_ID`             | secret      | Environment (dev/prod) | Read TF state from S3         |
-| `AWS_SECRET_ACCESS_KEY`         | secret      | Environment (dev/prod) | Read TF state from S3         |
-| `CF_WARP_AUTH_CLIENT_ID`        | secret      | Environment (dev/prod) | WARP service-token client ID  |
-| `CF_WARP_AUTH_CLIENT_SECRET`    | secret      | Environment (dev/prod) | WARP service-token secret     |
-| `CF_WARP_ORG`                   | variable    | Environment / repo  | Zero Trust team domain           |
-| `AWS_DEFAULT_REGION`            | variable    | Repo                | Defaults to `eu-west-2`          |
-
-The static-AWS-creds pattern matches `cf-terraform-infra`. Migrating both
-repos to AWS OIDC is a future iteration.

@@ -23,10 +23,6 @@
         msg:
           host: "{{ inventory_hostname }}"
           ansible_host: "{{ ansible_host }}"
-          environment: "{{ environment }}"
           site_cidr: "{{ site_cidr }}"
-          private_hostname: "{{ private_hostname }}"
-          ha_enabled: "{{ ha_enabled }}"
-          ha_peer_ip: "{{ ha_peer_ip }}"
           remote_cidrs: "{{ remote_cidrs | from_json }}"
-          tunnel_token_present: "{{ tunnel_token is defined and tunnel_token | length > 0 }}"
+          location: "{{ location }}"
