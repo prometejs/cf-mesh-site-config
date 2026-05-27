@@ -17,4 +17,3 @@ runs:
       run: |
         echo "${{ env.SSH_PRIVATE_KEY }}" > ~/.ssh/hermes
         chmod 600 ~/.ssh/hermes
-      

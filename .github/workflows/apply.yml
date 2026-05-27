@@ -30,7 +30,7 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_REGION: ${{ vars.AWS_REGION }}
-        
+
     steps:
       - name: Install Dependencies
         uses: ./.github/actions/install-dependencies
@@ -42,4 +42,4 @@ jobs:
 
       - name: Apply Ansible config
         run: |
-          ansible-playbook deploy.yml -vvv -i 'inventories/${{ inputs.workspace }}/terraform_state.yml' -l "${{ inputs.limit }}" 
+          ansible-playbook deploy.yml -vvv -i 'inventories/${{ inputs.workspace }}/terraform_state.yml' -l "${{ inputs.limit }}"
