@@ -1,0 +1,6 @@
+---
+- name: Deploy
+  hosts: connectors
+  gather_facts: false
+  roles:
+    - ping

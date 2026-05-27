@@ -1,0 +1,20 @@
+---
+name: 'Configure Runner Keys'
+description: 'Configure Runner Keys'
+runs:
+  using: "composite"
+  steps:
+    - name: Set Runner Vault Key
+      if: env.VAULT_KEY != ''
+      shell: bash
+      run: |
+        echo "${{ env.VAULT_KEY }}" > ~/.vault-key.key
+        chmod 600 ~/.vault-key.key
+
+    - name: Set SSH Private Key
+      if: env.SSH_PRIVATE_KEY != ''
+      shell: bash
+      run: |
+        echo "${{ env.SSH_PRIVATE_KEY }}" > ~/.ssh/hermes
+        chmod 600 ~/.ssh/hermes
+      

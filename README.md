@@ -39,9 +39,6 @@ graph LR
 | :--- | :--- | :---- | :------ |
 | `AWS_ACCESS_KEY_ID` | secret | Environment (dev/prod) | Read TF state from S3 |
 | `AWS_SECRET_ACCESS_KEY` | secret | Environment (dev/prod) | Read TF state from S3 |
-| `CF_WARP_AUTH_CLIENT_ID` | secret | Environment (dev/prod) | WARP service-token client ID |
-| `CF_WARP_AUTH_CLIENT_SECRET` | secret | Environment (dev/prod) | WARP service-token secret |
-| `CF_WARP_ORG` | variable | Environment / repo  | Zero Trust team domain |
 | `AWS_REGION` | variable | Repo | Defaults to `eu-west-2` |
 
 ## Quickstart (local)
@@ -97,6 +94,7 @@ same S3 backend by `bin/init-tfstate`.
 region), update the inventory files here to match.
 
 ## CI / Deployment
+Workflows run on self-hosted GitHub Actions runner (workspace scoped), which already has access to internal private networks.
 
 - [`lint.yml`](.github/workflows/lint.yml): static checks
 - [`apply.yml`](.github/workflows/apply.yml): runs Ansible against real hosts

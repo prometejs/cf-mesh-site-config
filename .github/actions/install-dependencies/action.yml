@@ -1,0 +1,22 @@
+---
+name: 'Install Dependencies'
+description: 'Configure Runner'
+runs:
+  using: "composite"
+  steps:
+    - name: Install Terraform
+      uses: hashicorp/setup-terraform@v4
+      with:
+        terraform_wrapper: false
+
+    - name: Install Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.11"
+        cache: pip
+    
+    - name: Install Dependencies(ansible, linters, collections)
+      shell: bash
+      run: |
+        pip install "ansible-core==2.20" "ansible-lint>=24.0.0" "yamllint>=1.35.0"
+        ansible-galaxy collection install -r requirements.yml
