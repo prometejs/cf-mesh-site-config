@@ -42,4 +42,4 @@ jobs:
 
       - name: Apply Ansible config
         run: |
-          ansible-playbook deploy.yml -vvv -i 'inventories/${{ inputs.workspace }}/terraform_state.yml' -l "${{ inputs.limit }}"
+          ansible-playbook deploy.yml -vvv -i 'inventories/${{ inputs.workspace }}' -l "${{ inputs.limit }}"

@@ -1,0 +1,30 @@
+---
+name: Scan Inventory
+
+on:
+  workflow_dispatch:
+    inputs:
+      workspace:
+        description: Inventory environment.
+        type: choice
+        required: true
+        default: dev
+        options: [dev, prod]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.workspace }}
+    env:
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/install-dependencies
+      - name: Scan Inventory
+        run: ansible-inventory -i inventories/${{ inputs.workspace }} --graph

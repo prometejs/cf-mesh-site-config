@@ -1,0 +1,6 @@
+# test server in existing mesh node private network
+[web_server]
+10.68.2.3
+
+[experimental]
+experimental-1 ansible_host=192.0.2.10
